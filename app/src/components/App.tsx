@@ -1,11 +1,19 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { EditorState } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
-import { Schema, DOMParser } from "prosemirror-model";
+import { Schema, DOMParser, Node as PMNode } from "prosemirror-model";
 import { schema } from "prosemirror-schema-basic";
 import { addListNodes } from "prosemirror-schema-list";
 import { exampleSetup } from "prosemirror-example-setup";
+import { collab, receiveTransaction, getVersion } from "prosemirror-collab";
+
 import "./App.css";
+import { AuthorityType } from "../types";
+import Authority from "./CentralAuthority";
+import socketIOClient, { Socket } from "socket.io-client";
+import { saveRetrieveDocPlugin } from "./Plugins/saveDocPlugin";
+
+const ENDPOINT = "http://127.0.0.1:4001";
 
 /**
  * TO-DO:
@@ -19,25 +27,67 @@ import "./App.css";
  * - Menu bar
  */
 
-function App() {
-  useEffect(() => {
-    const mySchema = new Schema({
-      nodes: addListNodes(schema.spec.nodes, "paragraph block*", "block"),
-      marks: schema.spec.marks,
-    });
+/**
+ * TO-DO:
+ * Each document has a channel. Each client subscribes to the channel
+ * to receive latest document state and sending their local steps.
+ */
 
-    (window as any).view = new EditorView(
-      document.querySelector("#editor") as Node,
-      {
-        state: EditorState.create({
-          doc: DOMParser.fromSchema(mySchema).parse(
-            document.querySelector("#content") as Node
-          ),
-          plugins: exampleSetup({ schema: mySchema }),
-        }),
-      }
+function collabEditor(
+  authority: AuthorityType,
+  place: any,
+  mySchema: Schema,
+  socket: Socket
+) {
+  const examplePlugins = exampleSetup({ schema: mySchema });
+  let view = new EditorView(place, {
+    state: EditorState.create({
+      doc: authority.doc,
+      plugins: [
+        saveRetrieveDocPlugin({ socket }),
+        ...examplePlugins,
+        collab({ version: authority.steps.length }),
+      ],
+    }),
+  });
+  authority.onNewSteps.push(function () {
+    let newData = authority.stepsSince(getVersion(view.state));
+    view.dispatch(
+      receiveTransaction(view.state, newData.steps, newData.clientIDs)
     );
   });
+  return view;
+}
+
+function App() {
+  useEffect(() => {
+    const socket = socketIOClient(ENDPOINT);
+
+    if (!(window as any).view) {
+      const mySchema = new Schema({
+        nodes: addListNodes(schema.spec.nodes, "paragraph block*", "block"),
+        marks: schema.spec.marks,
+      });
+      socket.emit("getData");
+      socket.on("receiveDocument", (data) => {
+        const doc = data
+          ? mySchema.nodeFromJSON(JSON.parse(data))
+          : DOMParser.fromSchema(mySchema).parse(
+              document.querySelector("#content") as Node
+            );
+        const place = document.querySelector("#editor") as Node;
+        const myAuthority = new Authority(doc);
+        const myView = collabEditor(myAuthority, place, mySchema, socket);
+        (window as any).view = myView;
+      });
+    }
+
+    return () => {
+      socket.disconnect();
+      (window as any).view.destroy();
+    };
+  }, []);
+
   return (
     <div className="App">
       <div id="editor" />
