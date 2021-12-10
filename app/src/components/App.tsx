@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { EditorState } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
-import { Schema, DOMParser, Node as PMNode } from "prosemirror-model";
+import { Schema, DOMParser } from "prosemirror-model";
 import { schema } from "prosemirror-schema-basic";
 import { addListNodes } from "prosemirror-schema-list";
 import { exampleSetup } from "prosemirror-example-setup";
@@ -37,9 +37,22 @@ function collabEditor(
   authority: AuthorityType,
   place: any,
   mySchema: Schema,
-  socket: Socket
+  socket: Socket,
+  isUpdate: boolean
 ) {
   const examplePlugins = exampleSetup({ schema: mySchema });
+  if (isUpdate) {
+    const newState = EditorState.create({
+      doc: authority.doc,
+      plugins: [
+        saveRetrieveDocPlugin({ socket }),
+        ...examplePlugins,
+        collab({ version: authority.steps.length }),
+      ],
+    });
+    ((window as any).view as EditorView).updateState(newState);
+    return (window as any).view;
+  }
   let view = new EditorView(place, {
     state: EditorState.create({
       doc: authority.doc,
@@ -63,28 +76,36 @@ function App() {
   useEffect(() => {
     const socket = socketIOClient(ENDPOINT);
 
-    if (!(window as any).view) {
-      const mySchema = new Schema({
-        nodes: addListNodes(schema.spec.nodes, "paragraph block*", "block"),
-        marks: schema.spec.marks,
-      });
+    const mySchema = new Schema({
+      nodes: addListNodes(schema.spec.nodes, "paragraph block*", "block"),
+      marks: schema.spec.marks,
+    });
+    socket.emit("getData");
+    socket.on("receiveDocument", (data) => {
+      const isUpdate = (window as any).view;
+      const doc = data
+        ? mySchema.nodeFromJSON(JSON.parse(data))
+        : DOMParser.fromSchema(mySchema).parse(
+            document.querySelector("#content") as Node
+          );
+      const place = document.querySelector("#editor") as Node;
+      const myAuthority = new Authority(doc);
+      const myView = collabEditor(
+        myAuthority,
+        place,
+        mySchema,
+        socket,
+        isUpdate
+      );
+      (window as any).view = myView;
+    });
+    socket.on("updateData", () => {
       socket.emit("getData");
-      socket.on("receiveDocument", (data) => {
-        const doc = data
-          ? mySchema.nodeFromJSON(JSON.parse(data))
-          : DOMParser.fromSchema(mySchema).parse(
-              document.querySelector("#content") as Node
-            );
-        const place = document.querySelector("#editor") as Node;
-        const myAuthority = new Authority(doc);
-        const myView = collabEditor(myAuthority, place, mySchema, socket);
-        (window as any).view = myView;
-      });
-    }
-
+    });
     return () => {
       socket.disconnect();
       (window as any).view.destroy();
+      (window as any).view = undefined;
     };
   }, []);
 

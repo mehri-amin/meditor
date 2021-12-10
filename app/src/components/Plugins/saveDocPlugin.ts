@@ -11,6 +11,9 @@ export const saveRetrieveDocPlugin = ({ socket }: { socket: Socket }) => {
       apply(tr) {
         if (tr.docChanged) {
           socket.emit("saveData", JSON.stringify(tr.doc.toJSON()));
+          socket.on("updateData", () => {
+            socket.emit("getData");
+          });
         }
       },
     },

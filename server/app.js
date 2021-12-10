@@ -22,17 +22,15 @@ const io = socketIo(server, {
 
 io.on("connection", (socket) => {
   console.log("New Client connected");
-  socket.emit("hello", doc);
 
   socket.on("disconnect", () => {
     console.log("Client disconnected");
   });
   socket.on("saveData", (data) => {
     doc = data;
+    socket.broadcast.emit("updateData");
   });
   socket.on("getData", () => {
-    console.log("getData");
-    console.log(doc);
     socket.emit("receiveDocument", doc);
   });
 });
