@@ -7,5 +7,5 @@ export type AuthorityType = {
       steps: Array<any>,
       clientIDs: Array<any>
   };
-  receiveSteps: (version:any, steps: any, clientID: any) => void;
+  receiveSteps: (version:any, steps: any, clientID: any) => any;
 };

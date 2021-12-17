@@ -12,7 +12,9 @@ app.use(cors());
 app.set("port", port);
 
 const server = http.createServer(app);
-let doc;
+
+let currentDoc;
+
 const io = socketIo(server, {
   cors: {
     origin: "http://localhost:3000",
@@ -21,17 +23,22 @@ const io = socketIo(server, {
 });
 
 io.on("connection", (socket) => {
-  console.log("New Client connected");
-
   socket.on("disconnect", () => {
-    console.log("Client disconnected");
+    console.log(`Client: ${socket.id} disconnected`);
   });
-  socket.on("saveData", (data) => {
-    doc = data;
-    socket.broadcast.emit("updateData");
+  socket.on("hello", () => {
+    console.log(`New Client: ${socket.id} connected`);
+    socket.emit("init", currentDoc);
   });
-  socket.on("getData", () => {
-    socket.emit("receiveDocument", doc);
+  socket.on("update", (data) => {
+    const { version, steps, clientId, doc } = data;
+    currentDoc = doc;
+    socket.broadcast.emit("updateDoc", {
+      version,
+      steps,
+      clientId,
+      doc,
+    });
   });
 });
 

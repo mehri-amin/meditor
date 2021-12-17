@@ -1,4 +1,3 @@
-
 export default class Authority {
   constructor(doc) {
     this.doc = doc;
@@ -8,8 +7,9 @@ export default class Authority {
   }
 
   receiveSteps(version, steps, clientID) {
-    console.log('receiveSteps');
-    if (version !== this.steps.length) return;
+    if (version !== this.steps.length) {
+      return false;
+    };
 
     // Apply and accumulate new steps
     steps.forEach((step) => {
@@ -21,6 +21,7 @@ export default class Authority {
     this.onNewSteps.forEach(function (f) {
       f();
     });
+    return this.doc;
   }
 
   stepsSince(version) {
